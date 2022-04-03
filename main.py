@@ -4,6 +4,11 @@ import pandas as pd
 from io import StringIO, BytesIO
 from datetime import datetime, timedelta
 
+import matplotlib.pyplot as plt
+import numpy as np
+from sklearn import datasets, linear_model
+from sklearn.metrics import mean_squared_error, r2_score
+
 
 #class ClaseLoad():
 
@@ -44,21 +49,13 @@ class ClaseapplicationLayer():
         
         df_all = df_all.loc[:, columns]
         df_all.dropna(inplace=True)
+
+        df_all= df_all.loc[(df_all["Time"] >= '08:00') & (df_all["Time"]<='12:00') , ["ISIN", "Date","Time","StartPrice","EndPrice"]]
+        df_all=df_all[df_all['ISIN']=='AT0000A0E9W5']
+
+        df_all['std']=df_all[["StartPrice", "EndPrice"]].std(axis=1)
+        df_all["EndPrice_MXN"]= df_all["EndPrice"] * 22.94
         
-        #get opening price per ISIN and Day
-        df_all['opening_price'] = df_all.sort_values(by=['Time']).groupby(['ISIN', 'Date'])['StartPrice'].transform('first')
-        
-        #Get closing price per ISIN and Day
-        df_all['closing_price'] = df_all.sort_values(by=['Time']).groupby(['ISIN', 'Date'])['StartPrice'].transform('last')
-        
-        #Agregation
-        df_all = df_all.groupby(['ISIN', 'Date'], as_index=False).agg(opening_price_eur=('opening_price', 'min'), closing_price_eur=('closing_price', 'min'), minimum_price_eur=('MinPrice', 'min'), maximum_price_eur=('MaxPrice', 'max'), daily_traded_volume=('TradedVolume', 'sum'))
-    
-        #Percent Change Prev Closing
-        df_all['prev_closing_price'] = df_all.sort_values(by=['Date']).groupby(['ISIN'])['closing_price_eur'].shift(1)
-        df_all['change_prev_closing_%'] = (df_all['closing_price_eur'] - df_all['prev_closing_price']) / df_all['prev_closing_price'] * 100
-        
-        df_all.drop(columns=['prev_closing_price'], inplace=True)
         df_all = df_all.round(decimals=2)
         df_all = df_all[df_all.Date >= arg_date]
         
@@ -87,19 +84,48 @@ class ClaseapplicationLayer():
         df_all = ClaseapplicationLayer.extract(key,objects,bucket)
 
         df_all = ClaseapplicationLayer.transform_report(df_all,arg_date,columns)
-    
+        regresion.cosas(df_all)
+                
         data = ClaseapplicationLayer.load(s3,trg_bucket,df_all,key)
         df_report = pd.read_parquet(data)
         print("Esto es el df report",df_report)
         return df_report
 
+class regresion():
+    def cosas(df_all):
+        X = df_all['EndPrice']
+        y = df_all['Time'].replace({':':'.'}, regex=True).astype(float)
+        #y=y.head(n=50000)
+        #X=X.head(n=50000)
+        plt.xlim(0, 300)
+        plt.ylim(7.5, 12)
+        plt.plot(X,y, color="red")
+        plt.grid(alpha=0.3)
+        y=y.reset_index().values
+        X=X.reset_index().values 
+        X_train = X[:-70]
+        X_test = X[-70:]
+        y_train =y[:-70]
+        y_test = y[-70:]
+        regr = linear_model.LinearRegression().fit(X_train,y_train)
+        y_pred = regr.predict(X_test)
+        print("Coeficientes: \n", regr.coef_)
+        print("Error cuadratico medio: %.2f" % mean_squared_error(y_test, y_pred))
+        # El coeficiente de determinacion: 1 de prediccion en perfecto
+        print("Coeficinete de determinacion: %.2f" % r2_score(y_test,y_pred))
+        plt.scatter(X_test, y_test, color="blue")
+        plt.plot(X_test,y_pred, color="red")
+
+        plt.grid(alpha=0.3)
+        plt.show()
+        return True
 
 class main():
     arg_date = ''
     src_format = '%Y-%m-%d'
     src_bucket = 'deutsche-boerse-xetra-pds'
     trg_bucket = 'xetra-bucket-rizo1'
-    columns = ['ISIN', 'Date', 'Time', 'StartPrice', 'MaxPrice', 'MinPrice', 'EndPrice', 'TradedVolume']
+    columns = ['ISIN', 'Date', 'Time', 'StartPrice', 'EndPrice']
     key = 'xetra_daily_report_' + datetime.today().strftime("%Y%m%d_%H%M%S") + '.parquet'
     
     # Init
