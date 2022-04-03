@@ -5,7 +5,6 @@ from datetime import datetime, timedelta
 import numpy as np
 import matplotlib.pyplot as plt
 
-
 arg_date = '2022-04-02'
 
 
