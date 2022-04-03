@@ -1,3 +1,4 @@
+from mimetypes import init
 from sqlite3 import adapt
 import boto3
 import pandas as pd
@@ -9,14 +10,35 @@ import numpy as np
 from sklearn import datasets, linear_model
 from sklearn.metrics import mean_squared_error, r2_score
 
+class Variables():
+    def __init__(self):
+        self.arg_date = '',
+        self.src_format = '%Y-%m-%d',
+        self.src_bucket = 'deutsche-boerse-xetra-pds',
+        self.trg_bucket = 'xetra-bucket-rizo1',
+        self.columns = ['ISIN', 'Date', 'Time', 'StartPrice', 'EndPrice'],
+        self.key = 'xetra_daily_report_' + datetime.today().strftime("%Y%m%d_%H%M%S") + '.parquet',
+        self.s3 = boto3.resource('s3'),
+        self.bucket = self.s3.Bucket(self.src_bucket)
 
-#class ClaseLoad():
-
-
-#class ClaseTransform():
-   
-#class ClaseXtract():
+class ClaseXtract(Variables):
+    def __init__(self):
+        self.key = Variables.key,
+        self.objects = Variables.objects,
+        self.bucket = Variables.bucket
     
+class ClaseTransform(Variables):
+    def __init__(self,df_all):
+       self.df_all = df_all,
+       self.arg_date = Variables.arg_date,
+       self.columns = Variables.columns
+       
+class ClaseLoad(Variables):
+    def __init__(self,df_all):
+       self.s3 = Variables.s3,
+       self.trg_bucket= Variables.trg_bucket,
+       self.df_all= df_all,
+       self.key = Variables.key           
 
 class ClaseadapterLayer():
     
@@ -38,9 +60,10 @@ class ClaseadapterLayer():
         objects = [obj for obj in bucket.objects.all() if datetime.strptime(obj.key.split('/')[0], src_format).date() >= arg_date_dt]
         return objects
 
-class ClaseapplicationLayer():
+class ClaseapplicationLayer(): 
 
     def extract(key,objects,bucket):
+
         df_all = pd.concat([ClaseadapterLayer.read_csv_to_df(bucket,obj.key) for obj in objects], ignore_index=True)
         
         return df_all
@@ -79,15 +102,19 @@ class ClaseapplicationLayer():
         
 
     def etl_report(key,columns,objects,bucket,arg_date,s3,trg_bucket):
-        #extraer ,transormar, cargar/load
+        #extraer ,transormar, cargar
         
-        df_all = ClaseapplicationLayer.extract(key,objects,bucket)
+        ClaseXtract1 = ClaseXtract()
+        df_all = ClaseapplicationLayer.extract(ClaseXtract1)
+        ClaseTransform1 = ClaseTransform(df_all)
+        df_all = ClaseapplicationLayer.transform_report(df_all)
 
-        df_all = ClaseapplicationLayer.transform_report(df_all,arg_date,columns)
         regresion.cosas(df_all)
-                
-        data = ClaseapplicationLayer.load(s3,trg_bucket,df_all,key)
+        ClaseLoad1 = ClaseLoad(df_all)
+        data = ClaseapplicationLayer.load(df_all)     
+    
         df_report = pd.read_parquet(data)
+
         print("Esto es el df report",df_report)
         return df_report
 
@@ -121,17 +148,6 @@ class regresion():
         return True
 
 class main():
-    arg_date = ''
-    src_format = '%Y-%m-%d'
-    src_bucket = 'deutsche-boerse-xetra-pds'
-    trg_bucket = 'xetra-bucket-rizo1'
-    columns = ['ISIN', 'Date', 'Time', 'StartPrice', 'EndPrice']
-    key = 'xetra_daily_report_' + datetime.today().strftime("%Y%m%d_%H%M%S") + '.parquet'
-    
-    # Init
-    s3 = boto3.resource('s3')
-    bucket = s3.Bucket(src_bucket)
-    
     # run application
     arg_date= input("Ingresa una fecha yyyy-mm-dd:")  
     objects= ClaseadapterLayer.return_objects(bucket,key,src_format,arg_date)
