@@ -9,6 +9,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from sklearn import datasets, linear_model
 from sklearn.metrics import mean_squared_error, r2_score
+from sklearn.model_selection import train_test_split
+
 
 class ClaseXtract():
     def __init__(self):
@@ -47,7 +49,7 @@ class ClaseadapterLayer():
         df_all.to_parquet(out_buffer, index=False)
         bucket_target = s3.Bucket(trg_bucket)
         bucket_target.put_object(Body=out_buffer.getvalue(), Key=key)
-        return True
+        return bucket_target
         
 class ClaseapplicationLayer():
 
@@ -107,8 +109,9 @@ class ClaseEtl():
 
         df_all = ClaseapplicationLayer.transform_report(objTransform.df_all,objTransform.arg_date,objTransform.columns)
         
-        # regresion.cosas(df_all)
+        regresion.cosas(df_all)
         objLoad = ClaseLoad(df_all)
+
         data = ClaseapplicationLayer.load(s3,objLoad.trg_bucket,df_all,objLoad.key)
 
         df_report = pd.read_parquet(data)
@@ -120,18 +123,13 @@ class regresion():
     def cosas(df_all):
         X = df_all['EndPrice']
         y = df_all['Time'].replace({':':'.'}, regex=True).astype(float)
-        #y=y.head(n=50000)
-        #X=X.head(n=50000)
-        plt.xlim(0, 300)
-        plt.ylim(7.5, 12)
+       
         plt.plot(X,y, color="red")
         plt.grid(alpha=0.3)
         y=y.reset_index().values
         X=X.reset_index().values 
-        X_train = X[:-70]
-        X_test = X[-70:]
-        y_train =y[:-70]
-        y_test = y[-70:]
+
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=0)
         regr = linear_model.LinearRegression().fit(X_train,y_train)
         y_pred = regr.predict(X_test)
         print("Coeficientes: \n", regr.coef_)
@@ -142,7 +140,9 @@ class regresion():
         plt.plot(X_test,y_pred, color="red")
 
         plt.grid(alpha=0.3)
+        plt.savefig("Figure_1.png")
         plt.show()
+        
         return True
 
 class main():
