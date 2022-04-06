@@ -10,38 +10,32 @@ import numpy as np
 from sklearn import datasets, linear_model
 from sklearn.metrics import mean_squared_error, r2_score
 
-class Variables():
+class ClaseXtract():
     def __init__(self):
-        self.arg_date = '',
-        self.src_format = '%Y-%m-%d',
-        self.src_bucket = 'deutsche-boerse-xetra-pds',
-        self.trg_bucket = 'xetra-bucket-rizo1',
-        self.columns = ['ISIN', 'Date', 'Time', 'StartPrice', 'EndPrice'],
-        self.key = 'xetra_daily_report_' + datetime.today().strftime("%Y%m%d_%H%M%S") + '.parquet',
-        self.s3 = boto3.resource('s3'),
-        self.bucket = self.s3.Bucket(self.src_bucket)
-
-class ClaseXtract(Variables):
-    def __init__(self):
-        self.key = Variables.key,
-        self.objects = Variables.objects,
-        self.bucket = Variables.bucket
-    
-class ClaseTransform(Variables):
-    def __init__(self,df_all):
-       self.df_all = df_all,
-       self.arg_date = Variables.arg_date,
-       self.columns = Variables.columns
+        self.arg_date=input("Ingresa una fecha yyyy-mm-dd:")
+        self.src_format = '%Y-%m-%d'
+        self.key = 'xetra_daily_report_' + datetime.today().strftime("%Y%m%d_%H%M%S") + '.parquet'
+        self.src_bucket = 'deutsche-boerse-xetra-pds'
+          
+class ClaseTransform():
+    def __init__(self,df_all,arg_date):
+        self.df_all=df_all
+        self.arg_date= arg_date
+        self.columns =  ['ISIN', 'Date', 'Time', 'StartPrice', 'EndPrice']
        
-class ClaseLoad(Variables):
-    def __init__(self,df_all):
-       self.s3 = Variables.s3,
-       self.trg_bucket= Variables.trg_bucket,
-       self.df_all= df_all,
-       self.key = Variables.key           
+class ClaseLoad():
+    def __init__(self,df_all):   
+        self.trg_bucket = 'xetra-bucket-rizo1'
+        self.df_all= df_all
+        self.key = 'xetra_daily_report_' + datetime.today().strftime("%Y%m%d_%H%M%S") + '.parquet'
 
 class ClaseadapterLayer():
-    
+
+    def return_objects(bucket,key,src_format,arg_date):
+        arg_date_dt = datetime.strptime(arg_date, src_format).date() - timedelta(days=1)
+        objects = [obj for obj in bucket.objects.all() if datetime.strptime(obj.key.split('/')[0], src_format).date() >= arg_date_dt]
+        return objects
+
     def read_csv_to_df(bucket,key):
         csv_obj = bucket.Object(key=key).get().get('Body').read().decode('utf-8')
         data = StringIO(csv_obj)
@@ -53,17 +47,12 @@ class ClaseadapterLayer():
         df_all.to_parquet(out_buffer, index=False)
         bucket_target = s3.Bucket(trg_bucket)
         bucket_target.put_object(Body=out_buffer.getvalue(), Key=key)
-        return bucket_target
+        return True
         
-    def return_objects(bucket,key,src_format,arg_date):
-        arg_date_dt = datetime.strptime(arg_date, src_format).date() - timedelta(days=1)
-        objects = [obj for obj in bucket.objects.all() if datetime.strptime(obj.key.split('/')[0], src_format).date() >= arg_date_dt]
-        return objects
+class ClaseapplicationLayer():
 
-class ClaseapplicationLayer(): 
-
-    def extract(key,objects,bucket):
-
+    def extract(bucket,key,objects):
+               
         df_all = pd.concat([ClaseadapterLayer.read_csv_to_df(bucket,obj.key) for obj in objects], ignore_index=True)
         
         return df_all
@@ -100,19 +89,28 @@ class ClaseapplicationLayer():
     
         return data
         
+class ClaseEtl():
+    def etl_report():
+        #extraer ,transormar, cargar/load
+         
 
-    def etl_report(key,columns,objects,bucket,arg_date,s3,trg_bucket):
-        #extraer ,transormar, cargar
+        objExtract = ClaseXtract()
         
-        ClaseXtract1 = ClaseXtract()
-        df_all = ClaseapplicationLayer.extract(ClaseXtract1)
-        ClaseTransform1 = ClaseTransform(df_all)
-        df_all = ClaseapplicationLayer.transform_report(df_all)
+        s3 = boto3.resource('s3')
+        bucket = s3.Bucket(objExtract.src_bucket) 
 
-        regresion.cosas(df_all)
-        ClaseLoad1 = ClaseLoad(df_all)
-        data = ClaseapplicationLayer.load(df_all)     
-    
+        objects=ClaseadapterLayer.return_objects(bucket,objExtract.key,objExtract.src_format,objExtract.arg_date)
+
+        df_all = ClaseapplicationLayer.extract(bucket,objExtract.key,objects)
+
+        objTransform = ClaseTransform(df_all,objExtract.arg_date)
+
+        df_all = ClaseapplicationLayer.transform_report(objTransform.df_all,objTransform.arg_date,objTransform.columns)
+        
+        # regresion.cosas(df_all)
+        objLoad = ClaseLoad(df_all)
+        data = ClaseapplicationLayer.load(s3,objLoad.trg_bucket,df_all,objLoad.key)
+
         df_report = pd.read_parquet(data)
 
         print("Esto es el df report",df_report)
@@ -148,11 +146,7 @@ class regresion():
         return True
 
 class main():
-    # run application
-    arg_date= input("Ingresa una fecha yyyy-mm-dd:")  
-    objects= ClaseadapterLayer.return_objects(bucket,key,src_format,arg_date)
-
-    ClaseapplicationLayer.etl_report(key,columns,objects,bucket,arg_date,s3,trg_bucket)
+    ClaseEtl.etl_report()
     
 
 
