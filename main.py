@@ -33,6 +33,7 @@ class ClaseadapterLayer():
         objects = [obj for obj in bucket.objects.all() if datetime.strptime(obj.key.split('/')[0], src_format).date() >= arg_date_dt]
         return objects
 
+
     def read_csv_to_df(bucket,key):
         csv_obj = bucket.Object(key=key).get().get('Body').read().decode('utf-8')
         data = StringIO(csv_obj)
