@@ -1,16 +1,11 @@
-from mimetypes import init
-from sqlite3 import adapt
 import boto3
 import pandas as pd
 from io import StringIO, BytesIO
 from datetime import datetime, timedelta
-
 import matplotlib.pyplot as plt
-import numpy as np
-from sklearn import datasets, linear_model
+from sklearn import linear_model
 from sklearn.metrics import mean_squared_error, r2_score
 from sklearn.model_selection import train_test_split
-
 
 class ClaseXtract():
     def __init__(self):
@@ -67,13 +62,14 @@ class ClaseapplicationLayer():
         df_all= df_all.loc[(df_all["Time"] >= '08:00') & (df_all["Time"]<='12:00') , ["ISIN", "Date","Time","StartPrice","EndPrice"]]
         df_all=df_all[df_all['ISIN']=='AT0000A0E9W5']
 
+
         df_all['std']=df_all[["StartPrice", "EndPrice"]].std(axis=1)
-        df_all["EndPrice_MXN"]= df_all["EndPrice"] * 22.94
+        df_all["EndPrice_MXN"]= df_all["EndPrice"] * 21.98
         
         df_all = df_all.round(decimals=2)
         df_all = df_all[df_all.Date >= arg_date]
         
-        print("Esto es el df_all dentro de Transform", df_all)
+        print("Esto es el df_all dentro de Transform\n", df_all)
         return df_all
 
     def load(s3,trg_bucket,df_all,key):
@@ -94,8 +90,6 @@ class ClaseapplicationLayer():
 class ClaseEtl():
     def etl_report():
         #extraer ,transormar, cargar/load
-         
-
         objExtract = ClaseXtract()
         
         s3 = boto3.resource('s3')
@@ -110,13 +104,14 @@ class ClaseEtl():
         df_all = ClaseapplicationLayer.transform_report(objTransform.df_all,objTransform.arg_date,objTransform.columns)
         
         regresion.cosas(df_all)
+
         objLoad = ClaseLoad(df_all)
 
         data = ClaseapplicationLayer.load(s3,objLoad.trg_bucket,df_all,objLoad.key)
 
         df_report = pd.read_parquet(data)
 
-        print("Esto es el df report",df_report)
+        print("Esto es el df report\n",df_report)
         return df_report
 
 class regresion():
